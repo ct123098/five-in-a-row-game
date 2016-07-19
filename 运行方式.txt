@@ -1,0 +1,6 @@
+运行方式：
+执行命令：GameRunner <程序1> <程序2>
+当程序名称取CON时表示用户
+例1：GameRunner randput.exe randput.exe
+例2：GameRunner randput.exe seqput.exe
+例3：GameRunner CON randput.exe
