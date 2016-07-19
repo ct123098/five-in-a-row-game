@@ -1,3 +1,5 @@
+//#define Debug
+
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -8,11 +10,16 @@
 #include <ctime>
 #include <windows.h>
 
+
 using namespace std;
 
 const int N = 15;
 const int dx[] = {1, 1, 1, 0, 0, -1, -1, -1};
 const int dy[] = {1, 0, -1, 1, -1, 1, 0, -1};
+
+#ifdef Debug
+FILE *log = fopen("log.txt", "w");
+#endif
 
 bool in(int x, int y)
 {
@@ -92,13 +99,23 @@ struct Board
 
 							int rank = 0;
 							if(getmap(i - dx[k], j - dy[k]) == 0)
-								rank += 1, val[i - dx[k]][j - dy[k]] += 1 + cnt;
+								rank += 1;
 							if(getmap(x + dx[k], y + dy[k]) == 0)
-								rank += 1, val[x + dx[k]][y + dy[k]] += 1 + cnt;
+								rank += 1;
 							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == type)
 								rank += 1;
 							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == type)
 								rank += 1;
+
+							if(getmap(i - dx[k], j - dy[k]) == 0)
+								val[i - dx[k]][j - dy[k]] += rank + cnt;
+							if(getmap(x + dx[k], y + dy[k]) == 0)
+								val[x + dx[k]][y + dy[k]] += rank + cnt;
+							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == 0) if(rank + cnt < 5)
+								val[i - 2 * dx[k]][j - 2 * dy[k]] += 0.6 * (rank + cnt);
+							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == 0) if(rank + cnt < 5)
+								val[x + 2 * dx[k]][y + 2 * dy[k]] += 0.6 * (rank + cnt);
+
 							if(rank <= 0) continue;
 							v.push_back(Adj(Point(i, j), Point(x, y), k, cnt, rank + cnt));
 						}
@@ -111,7 +128,7 @@ struct Board
 		if(mxrank < 5) return;
 		for(int i = 0; i < a.size(); i++)
 		{
-			if(mxrank < 5) break;
+			if(mxrank < mxrank) break;
 			if(getmap(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]) == 0)
 				p.push_back(Point(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]));
 			if(getmap(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d]) == 0)
@@ -124,9 +141,9 @@ struct Board
 		clear();
 		for(int i = 0; i < N; i++)
 			for(int j = 0; j < N; j++)
-				Defv[i][j] = Attv[i][j] = 0.9 - 0.15 * rand() / RAND_MAX - 0.1 * max(abs(7 - i), abs(7 - j));
+				Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
 		getAdj(Def, Defv, 2);
-		getAdj(Att, Defv, 1);
+		getAdj(Att, Attv, 1);
 		getForce(forceDef, Def);
 		getForce(forceAtt, Att);
 	}
@@ -134,32 +151,22 @@ struct Board
 	Point makeDecision()
 	{
 		calcValues();
-		if(forceDef.size() != 0)
-			return forceDef[0];
-		if(forceAtt.size() != 0)
-			return forceAtt[0];
 		int mxdrank = Def.size() ? Def[0].r : 0;
 		int mxarank = Att.size() ? Att[0].r : 0;
-		if(mxdrank + 1 > mxarank)
-		{
-			double best = -1;
-			Point p;
-			for(int i = 0; i < N; i++)
-				for(int j = 0; j < N; j++)
-					if(getmap(i, j) == 0 && Defv[i][j] > best)
-						best = Defv[i][j], p = Point(i, j);
-			return p;
-		}
-		else
-		{
-			double best = -1;
-			Point p;
-			for(int i = 0; i < N; i++)
-				for(int j = 0; j < N; j++)
-					if(getmap(i, j) == 0 && Attv[i][j] > best)
-						best = Attv[i][j], p = Point(i, j);
-			return p;
-		}
+
+		if(mxarank >= 5 && mxdrank <= mxarank && forceAtt.size())
+			return forceAtt[0];
+		if(mxdrank >= 5 && forceDef.size())
+			return forceDef[0];
+
+
+		double best = -1, dwei = 0.5 + 0.1 * mxdrank, awei = 1.0 - dwei;
+		Point p;
+		for(int i = 0; i < N; i++)
+			for(int j = 0; j < N; j++)
+				if(getmap(i, j) == 0 && dwei * Defv[i][j] + awei * Attv[i][j] > best)
+					best = dwei * Defv[i][j] + awei * Attv[i][j], p = Point(i, j);
+		return p;
 	}
 
 };
@@ -198,8 +205,31 @@ namespace Mine
 
 	void Go()
 	{
-		Sleep(1000);
-		Put(Arena.makeDecision());
+		Point put = Arena.makeDecision();
+
+#ifdef Debug
+
+
+		fprintf(log, "Defv\n");
+		for(int i = 0; i < N; i++)
+		{
+			for(int j = 0; j < N; j++)
+				fprintf(log, "%.2lf ", Arena.Defv[i][j]);
+			fprintf(log, "\n");
+		}
+		fprintf(log, "\n");
+		fprintf(log, "Attv\n");
+		for(int i = 0; i < N; i++)
+		{
+			for(int j = 0; j < N; j++)
+				fprintf(log, "%.2lf ", Arena.Attv[i][j]);
+			fprintf(log, "\n");
+		}
+		fprintf(log, "\n");
+
+#endif
+
+		Put(put);
 	}
 }
 
