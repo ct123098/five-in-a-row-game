@@ -1,4 +1,4 @@
-//#define Debug
+#define Debug
 
 #include <iostream>
 #include <cstring>
@@ -16,6 +16,7 @@ using namespace std;
 const int N = 15;
 const int dx[] = {1, 1, 1, 0, 0, -1, -1, -1};
 const int dy[] = {1, 0, -1, 1, -1, 1, 0, -1};
+int Round = 0;
 
 #ifdef Debug
 FILE *Log;
@@ -126,22 +127,23 @@ struct Board
 							if(getmap(x + dx[k], y + dy[k]) == 0)
 								rank += 1;
 							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == type)
-								rank += 1;
+								rank += 2;
 							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == type)
-								rank += 1;
+								rank += 2;
 
 							if(rank <= 0) continue;
+							rank += 2 * cnt;
 
 							if(getmap(i - dx[k], j - dy[k]) == 0)
-								val[i - dx[k]][j - dy[k]] += 0.2 * sqr(1 + cnt);
+								val[i - dx[k]][j - dy[k]] += 0.2 * sqr(rank / 2.0);
 							if(getmap(x + dx[k], y + dy[k]) == 0)
-								val[x + dx[k]][y + dy[k]] += 0.2 * sqr(1 + cnt);
-							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == 0) if(rank + cnt < 5)
-								val[i - 2 * dx[k]][j - 2 * dy[k]] += 0.65 * 0.2 * sqr(1 + cnt);
-							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == 0) if(rank + cnt < 5)
-								val[x + 2 * dx[k]][y + 2 * dy[k]] += 0.65 * 0.2 * sqr(1 + cnt);
+								val[x + dx[k]][y + dy[k]] += 0.2 * sqr(rank / 2.0);
+							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == 0)
+								val[i - 2 * dx[k]][j - 2 * dy[k]] += 0.65 * 0.2 * sqr(rank / 2.0);
+							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == 0)
+								val[x + 2 * dx[k]][y + 2 * dy[k]] += 0.65 * 0.2 * sqr(rank / 2.0);
 
-							v.push_back(Adj(Point(i, j), Point(x, y), k, cnt, rank + cnt));
+							v.push_back(Adj(Point(i, j), Point(x, y), k, cnt, rank));
 						}
 		sort(v.begin(), v.end(), cmp_rank);
 	}
@@ -149,7 +151,7 @@ struct Board
 	void getForce(vector<Point> &p, vector<Adj> &a, int type)
 	{
 		double mxrank = a.size() ? a[0].r : 0;
-		if(mxrank < 5) return;
+		if(mxrank < 8) return;
 		for(int i = 0; i < a.size(); i++)
 		{
 			if(a[i].r < mxrank) break;
@@ -160,7 +162,7 @@ struct Board
 			if(getmap(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d]) == 0) if(getmap(a[i].to.x + 2 * dx[a[i].d], a[i].to.y + 2 * dy[a[i].d]) == type)
 				p.push_back(Point(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d])), flag = true;
 
-			if(flag) continue;
+			if(type == 1 && flag) continue;
 
 			if(getmap(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]) == 0)
 				p.push_back(Point(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]));
@@ -188,21 +190,17 @@ struct Board
 		int mxdrank = Def.size() ? Def[0].r : 0;
 		int mxarank = Att.size() ? Att[0].r : 0;
 
-		if(mxarank >= 5 && mxdrank <= mxarank && forceAtt.size())
+		if(mxarank >= 8 && mxdrank <= mxarank && forceAtt.size())
 			return forceAtt[0];
-		if(mxdrank >= 5 && forceDef.size())
+		if(mxdrank >= 8 && forceDef.size())
 			return forceDef[0];
 
-		Dweight = max(0.1, 1.0 - 0.05 * Att.size());
-		for(int i = 0; i < Def.size(); i++)
-			if(Def[i].r >= 4)
-				Dweight += 0.1;
-			else if(Def[i].r >= 3)
-				Dweight += 0.01;
-			else
-				break;
+		Dweight = 0.5;
+		if(mxarank > mxdrank)
+			Dweight -= 0.2;
+		if(mxarank < mxdrank)
+			Dweight += 0.2;
 
-		Dweight = 0.5;//min(Dweight, 0.9);
 		Aweight = 1.0 - Dweight;
 
 		double best = -1;
@@ -229,6 +227,7 @@ namespace Yours
 
 	void Go()
 	{
+		Round++;
 		int r, c;
 		cin >> r >> c;
 		Put(r, c);
@@ -250,10 +249,14 @@ namespace Mine
 
 	void Go()
 	{
+		Round++;
 		Point put = arena.makeDecision();
 
 #ifdef Debug
 		Log = fopen("log.txt", "a+");
+
+
+		fprintf(Log, "Round %d\n", Round);
 
 		fprintf(Log, "Defv\n");
 		fprintf(Log, "   ");
@@ -285,12 +288,12 @@ namespace Mine
 
 		fprintf(Log, "Def\n");
 		for(int i = 0; i < arena.Def.size(); i++)
-			fprintf(Log, "%d %d to %d %d : rank = %d\n", arena.Def[i].fr.x, arena.Def[i].fr.y, arena.Def[i].to.x, arena.Def[i].to.y, arena.Def[i].r);
+			fprintf(Log, "%d %d to %d %d : cnt = %d rank = %d\n", arena.Def[i].fr.x, arena.Def[i].fr.y, arena.Def[i].to.x, arena.Def[i].to.y, arena.Def[i].c, arena.Def[i].r);
 		fprintf(Log, "\n");
 
 		fprintf(Log, "Att\n");
 		for(int i = 0; i < arena.Att.size(); i++)
-			fprintf(Log, "%d %d to %d %d : rank = %d\n", arena.Att[i].fr.x, arena.Att[i].fr.y, arena.Att[i].to.x, arena.Att[i].to.y, arena.Att[i].r);
+			fprintf(Log, "%d %d to %d %d : cnt = %d rank = %d\n", arena.Att[i].fr.x, arena.Att[i].fr.y, arena.Att[i].to.x, arena.Att[i].to.y, arena.Att[i].c, arena.Att[i].r);
 		fprintf(Log, "\n");
 
 		fprintf(Log, "Dweight = %.3lf\n", arena.Dweight);
