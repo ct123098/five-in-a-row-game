@@ -18,8 +18,19 @@ const int dx[] = {1, 1, 1, 0, 0, -1, -1, -1};
 const int dy[] = {1, 0, -1, 1, -1, 1, 0, -1};
 
 #ifdef Debug
-FILE *log = fopen("log.txt", "w");
+FILE *Log;
 #endif
+
+double sqr(double x)
+{ return x * x; }
+
+double cube(double x)
+{ return x * x * x; }
+
+double biq(double x)
+{ return x * x * x * x; }
+
+
 
 bool in(int x, int y)
 {
@@ -59,6 +70,7 @@ struct Board
 	vector<Adj> Def, Att;
 	vector<Point> forceDef, forceAtt;
 	double Defv[N][N], Attv[N][N];
+	double Dweight, Aweight;
 
 	int *operator [](int x)
 	{
@@ -78,6 +90,7 @@ struct Board
 		for(int i = 0; i < N; i++)
 			for(int j = 0; j < N; j++)
 				Defv[i][j] = Attv[i][j] = 0;
+		Dweight = Aweight = 0;
 	}
 
 	void getAdj(vector<Adj> &v, double val[][N], int type)
@@ -97,6 +110,16 @@ struct Board
 							}
 							x -= dx[k], y -= dy[k], cnt--;
 
+							int xx, yy, side = 0;
+							xx = i, yy = j, side--;
+							while(getmap(xx, yy) == 0 || getmap(xx, yy) == type)
+								side++, xx -= dx[k], yy -= dy[k];
+							xx = x, yy = y, side--;
+							while(getmap(xx, yy) == 0 || getmap(xx, yy) == type)
+								side++, xx += dx[k], yy += dy[k];
+
+							if(side + cnt < 5) continue;
+
 							int rank = 0;
 							if(getmap(i - dx[k], j - dy[k]) == 0)
 								rank += 1;
@@ -107,28 +130,38 @@ struct Board
 							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == type)
 								rank += 1;
 
-							if(getmap(i - dx[k], j - dy[k]) == 0)
-								val[i - dx[k]][j - dy[k]] += rank + cnt;
-							if(getmap(x + dx[k], y + dy[k]) == 0)
-								val[x + dx[k]][y + dy[k]] += rank + cnt;
-							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == 0) if(rank + cnt < 5)
-								val[i - 2 * dx[k]][j - 2 * dy[k]] += 0.6 * (rank + cnt);
-							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == 0) if(rank + cnt < 5)
-								val[x + 2 * dx[k]][y + 2 * dy[k]] += 0.6 * (rank + cnt);
-
 							if(rank <= 0) continue;
+
+							if(getmap(i - dx[k], j - dy[k]) == 0)
+								val[i - dx[k]][j - dy[k]] += 0.2 * sqr(1 + cnt);
+							if(getmap(x + dx[k], y + dy[k]) == 0)
+								val[x + dx[k]][y + dy[k]] += 0.2 * sqr(1 + cnt);
+							if(getmap(i - dx[k], j - dy[k]) == 0) if(getmap(i - 2 * dx[k], j - 2 * dy[k]) == 0) if(rank + cnt < 5)
+								val[i - 2 * dx[k]][j - 2 * dy[k]] += 0.65 * 0.2 * sqr(1 + cnt);
+							if(getmap(x + dx[k], y + dy[k]) == 0) if(getmap(x + 2 * dx[k], y + 2 * dy[k]) == 0) if(rank + cnt < 5)
+								val[x + 2 * dx[k]][y + 2 * dy[k]] += 0.65 * 0.2 * sqr(1 + cnt);
+
 							v.push_back(Adj(Point(i, j), Point(x, y), k, cnt, rank + cnt));
 						}
 		sort(v.begin(), v.end(), cmp_rank);
 	}
 
-	void getForce(vector<Point> &p, vector<Adj> &a)
+	void getForce(vector<Point> &p, vector<Adj> &a, int type)
 	{
 		double mxrank = a.size() ? a[0].r : 0;
 		if(mxrank < 5) return;
 		for(int i = 0; i < a.size(); i++)
 		{
-			if(mxrank < mxrank) break;
+			if(a[i].r < mxrank) break;
+
+			bool flag = false;
+			if(getmap(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]) == 0) if(getmap(a[i].fr.x - 2 * dx[a[i].d], a[i].fr.y - 2 * dy[a[i].d]) == type)
+				p.push_back(Point(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d])), flag = true;
+			if(getmap(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d]) == 0) if(getmap(a[i].to.x + 2 * dx[a[i].d], a[i].to.y + 2 * dy[a[i].d]) == type)
+				p.push_back(Point(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d])), flag = true;
+
+			if(flag) continue;
+
 			if(getmap(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]) == 0)
 				p.push_back(Point(a[i].fr.x - dx[a[i].d], a[i].fr.y - dy[a[i].d]));
 			if(getmap(a[i].to.x + dx[a[i].d], a[i].to.y + dy[a[i].d]) == 0)
@@ -141,11 +174,12 @@ struct Board
 		clear();
 		for(int i = 0; i < N; i++)
 			for(int j = 0; j < N; j++)
-				Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
+				if(getmap(i, j) == 0)
+					Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
 		getAdj(Def, Defv, 2);
 		getAdj(Att, Attv, 1);
-		getForce(forceDef, Def);
-		getForce(forceAtt, Att);
+		getForce(forceDef, Def, 2);
+		getForce(forceAtt, Att, 1);
 	}
 
 	Point makeDecision()
@@ -159,19 +193,30 @@ struct Board
 		if(mxdrank >= 5 && forceDef.size())
 			return forceDef[0];
 
+		Dweight = max(0.1, 1.0 - 0.05 * Att.size());
+		for(int i = 0; i < Def.size(); i++)
+			if(Def[i].r >= 4)
+				Dweight += 0.1;
+			else if(Def[i].r >= 3)
+				Dweight += 0.01;
+			else
+				break;
 
-		double best = -1, dwei = 0.5 + 0.1 * mxdrank, awei = 1.0 - dwei;
+		Dweight = 0.5;//min(Dweight, 0.9);
+		Aweight = 1.0 - Dweight;
+
+		double best = -1;
 		Point p;
 		for(int i = 0; i < N; i++)
 			for(int j = 0; j < N; j++)
-				if(getmap(i, j) == 0 && dwei * Defv[i][j] + awei * Attv[i][j] > best)
-					best = dwei * Defv[i][j] + awei * Attv[i][j], p = Point(i, j);
+				if(getmap(i, j) == 0 && Dweight * Defv[i][j] + Aweight * Attv[i][j] > best)
+					best = Dweight * Defv[i][j] + Aweight * Attv[i][j], p = Point(i, j);
 		return p;
 	}
 
 };
 
-Board Arena;
+Board arena;
 
 namespace Yours
 {
@@ -179,7 +224,7 @@ namespace Yours
 	{
 		if(r < 0 || r >= N || c < 0 || c >= N)
 			exit(0);
-		Arena[r][c] = 2;
+		arena[r][c] = 2;
 	}
 
 	void Go()
@@ -194,7 +239,7 @@ namespace Mine
 {
 	void Put(int r, int c)
 	{
-		Arena[r][c] = 1;
+		arena[r][c] = 1;
 		cout << r << " " << c << endl;
 	}
 
@@ -205,28 +250,54 @@ namespace Mine
 
 	void Go()
 	{
-		Point put = Arena.makeDecision();
+		Point put = arena.makeDecision();
 
 #ifdef Debug
+		Log = fopen("log.txt", "a+");
 
-
-		fprintf(log, "Defv\n");
+		fprintf(Log, "Defv\n");
+		fprintf(Log, "   ");
+		for(int i = 0; i < N; i++)
+			fprintf(Log, "  %c  ", 'A' + i);
+		fprintf(Log, "\n");
 		for(int i = 0; i < N; i++)
 		{
+			fprintf(Log, "%2d ", i + 1);
 			for(int j = 0; j < N; j++)
-				fprintf(log, "%.2lf ", Arena.Defv[i][j]);
-			fprintf(log, "\n");
+				fprintf(Log, "%.2lf ", arena.Defv[i][j]);
+			fprintf(Log, "\n");
 		}
-		fprintf(log, "\n");
-		fprintf(log, "Attv\n");
+		fprintf(Log, "\n");
+
+		fprintf(Log, "Attv\n");
+		fprintf(Log, "   ");
+		for(int i = 0; i < N; i++)
+			fprintf(Log, "  %c  ", 'A' + i);
+		fprintf(Log, "\n");
 		for(int i = 0; i < N; i++)
 		{
+			fprintf(Log, "%2d ", i + 1);
 			for(int j = 0; j < N; j++)
-				fprintf(log, "%.2lf ", Arena.Attv[i][j]);
-			fprintf(log, "\n");
+				fprintf(Log, "%.2lf ", arena.Attv[i][j]);
+			fprintf(Log, "\n");
 		}
-		fprintf(log, "\n");
+		fprintf(Log, "\n");
 
+		fprintf(Log, "Def\n");
+		for(int i = 0; i < arena.Def.size(); i++)
+			fprintf(Log, "%d %d to %d %d : rank = %d\n", arena.Def[i].fr.x, arena.Def[i].fr.y, arena.Def[i].to.x, arena.Def[i].to.y, arena.Def[i].r);
+		fprintf(Log, "\n");
+
+		fprintf(Log, "Att\n");
+		for(int i = 0; i < arena.Att.size(); i++)
+			fprintf(Log, "%d %d to %d %d : rank = %d\n", arena.Att[i].fr.x, arena.Att[i].fr.y, arena.Att[i].to.x, arena.Att[i].to.y, arena.Att[i].r);
+		fprintf(Log, "\n");
+
+		fprintf(Log, "Dweight = %.3lf\n", arena.Dweight);
+		fprintf(Log, "Aweight = %.3lf\n", arena.Aweight);
+		fprintf(Log, "\n");
+
+		fclose(Log);
 #endif
 
 		Put(put);
@@ -236,8 +307,13 @@ namespace Mine
 
 int main()
 {
+#ifdef Debug
+	Log = fopen("Log.txt", "w");
+	fclose(Log);
+#endif
+
 	srand(time(0));
-	memset(Arena.map, 0, sizeof(Arena.map));
+	memset(arena.map, 0, sizeof(arena.map));
 	int first;
 	cin >> first;
 	if(first)
