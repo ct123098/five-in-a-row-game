@@ -1,4 +1,4 @@
-//#define Debug
+#define Debug
 
 #include <iostream>
 #include <cstring>
@@ -43,6 +43,13 @@ struct Point
 	
 	Point(int _x = 0, int _y = 0) : x(_x), y(_y)
 	{}
+	
+	bool operator <(const Point &a) const
+	{
+		if(x != a.x)
+			return x < a.x;
+		return y < a.y;
+	}
 };
 
 bool in(const Point &p)
@@ -66,6 +73,12 @@ bool cmp_rank(const Adj &a, const Adj &b)
 	return a.r > b.r;
 }
 
+/*
+bool cmp_val(const Point &a, const Point &b)
+{
+	return true;
+}
+*/
 struct Board
 {
 	int map[N][N];
@@ -73,19 +86,25 @@ struct Board
 	vector<Point> forceDef, forceAtt;
 	double Defv[N][N], Attv[N][N];
 	double Dweight, Aweight;
+	int mxDRank, mxARank;
 	
 	int *operator [](int x)
 	{
 		return map[x];
 	}
 	
-	int getmap(int x, int y)
+	int getmap(int x, int y) const
 	{
 		if(!in(x, y))
 			return -1;
 		return map[x][y];
 	}
 	
+	double getval(int x, int y) const
+	{
+		return Dweight * Defv[x][y] + Aweight * Attv[x][y];
+	}
+
 	void clear()
 	{
 		Def.clear(), Att.clear();
@@ -94,6 +113,7 @@ struct Board
 			for(int j = 0; j < N; j++)
 				Defv[i][j] = Attv[i][j] = 0;
 		Dweight = Aweight = 0;
+		mxDRank = mxARank = 0;
 	}
 	
 	void getAdj(vector<Adj> &v, double val[][N], int type)
@@ -126,12 +146,27 @@ struct Board
 						rank += 2 * cnt;
 						emp.push_back(Point(i, j));
 						if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
-							rank += 1, emp.push_back(Point(x1 - dx[k], y1 - dy[k]));
+							rank += 1;
 						if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
-							rank += 1, emp.push_back(Point(x2 + dx[k], y2 + dy[k]));
+							rank += 1;
+						if(cnt + 1 >= 5)
+							rank += 2;
+						
+						if(cnt + 1 < 4)
+						{
+							if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
+								emp.push_back(Point(x1 - dx[k], y1 - dy[k]));
+							if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
+								emp.push_back(Point(x2 + dx[k], y2 + dy[k]));
+						}
 						
 						val[i][j] += 0.5 * sqr(rank / 2);
 						
+						if(getmap(x1 - 1 * dx[k], y1 - 1 * dy[k]) == 0)
+							val[x1 - 1 * dx[k]][y1 - 1 * dy[k]] += 0.25 * sqr(rank / 2);
+						if(getmap(x2 + 1 * dx[k], y2 + 1 * dy[k]) == 0)
+							val[x2 + 1 * dx[k]][y2 + 1 * dy[k]] += 0.25 * sqr(rank / 2);
+					
 						if(getmap(x1 - 2 * dx[k], y1 - 2 * dy[k]) == 0)
 							val[x1 - 2 * dx[k]][y1 - 2 * dy[k]] += 0.25 * sqr(rank / 2);
 						if(getmap(x2 + 2 * dx[k], y2 + 2 * dy[k]) == 0)
@@ -148,6 +183,7 @@ struct Board
 	void getForce(vector<Point> &p, vector<Adj> &a, int type)
 	{
 		double mxrank = a.size() ? a[0].r : 0;
+		vector<pair<double, Point> > tmp;
 		if(mxrank < 8)
 			return;
 		for(int i = 0; i < a.size(); i++)
@@ -155,8 +191,11 @@ struct Board
 			if(a[i].r < mxrank)
 				break;
 			for(int j = 0; j < a[i].e.size(); j++)
-				p.push_back(a[i].e[j]);
+				tmp.push_back(make_pair(getval(a[i].e[j].x, a[i].e[j].y), a[i].e[j]));
 		}
+		sort(tmp.begin(), tmp.end(), greater<pair<double, Point> >());
+		for(int i = 0; i < tmp.size(); i++)
+			p.push_back(tmp[i].second);
 	}
 	
 	void calcValues()
@@ -166,8 +205,20 @@ struct Board
 			for(int j = 0; j < N; j++)
 				if(getmap(i, j) == 0)
 					Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
+		
 		getAdj(Def, Defv, 2);
 		getAdj(Att, Attv, 1);
+		
+		mxDRank = Def.size() ? Def[0].r : 0;
+		mxARank = Att.size() ? Att[0].r : 0;
+		
+		Dweight = 0.5;
+		if(mxARank > mxDRank)
+			Dweight -= 0.2;
+		if(mxARank < mxDRank)
+			Dweight += 0.2;
+		Aweight = 1.0 - Dweight;
+		
 		getForce(forceDef, Def, 2);
 		getForce(forceAtt, Att, 1);
 	}
@@ -175,20 +226,10 @@ struct Board
 	Point makeDecision()
 	{
 		calcValues();
-		int mxdrank = Def.size() ? Def[0].r : 0;
-		int mxarank = Att.size() ? Att[0].r : 0;
 		
-		
-		Dweight = 0.5;
-		if(mxarank > mxdrank)
-			Dweight -= 0.2;
-		if(mxarank < mxdrank)
-			Dweight += 0.2;
-		Aweight = 1.0 - Dweight;
-		
-		if(mxarank >= 8 && mxdrank <= mxarank && forceAtt.size())
+		if(mxARank >= 8 && mxDRank <= mxARank && forceAtt.size())
 			return forceAtt[0];
-		if(mxdrank >= 8 && forceDef.size())
+		if(mxDRank >= 8 && forceDef.size())
 			return forceDef[0];
 		
 		
@@ -196,8 +237,8 @@ struct Board
 		Point p;
 		for(int i = 0; i < N; i++)
 			for(int j = 0; j < N; j++)
-				if(getmap(i, j) == 0 && Dweight * Defv[i][j] + Aweight * Attv[i][j] > best)
-					best = Dweight * Defv[i][j] + Aweight * Attv[i][j], p = Point(i, j);
+				if(getmap(i, j) == 0 && getval(i, j) > best)
+					best = getval(i, j), p = Point(i, j);
 		return p;
 	}
 	
