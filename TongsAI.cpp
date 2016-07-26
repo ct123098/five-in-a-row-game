@@ -52,27 +52,6 @@ struct Point
 	}
 };
 
-
-struct State;
-struct Board;
-
-struct State
-{
-	int map[N][N];
-	
-	State()
-	{
-		memset(map, 0, sizeof(map));
-	}
-	
-	State(const State &a)
-	{
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				map[i][j] = a.map[i][j];
-	}
-};
-
 struct Board
 {
 	int map[N][N];
