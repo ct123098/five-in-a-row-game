@@ -1,5 +1,8 @@
 //#define Debug
 
+//version = 0.2.1
+//author = ChenTong
+
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -52,54 +55,226 @@ struct Point
 	}
 };
 
-struct Board
+struct Change
+{
+	vector<Point> v;
+	
+	Change();
+	
+	Change(const Change &c);
+	
+	void add(const Point &p);
+	
+	void add(int x, int y);
+	
+	void pop();
+};
+
+struct State
 {
 	int map[N][N];
-	vector<Point> forceDef, forceAtt;
+	
+	State();
+	
+	State(const State &s);
+	
+	int *operator [](int x);
+	
+	int getmap(int x, int y) const;
+	
+	double value() const;
+	
+	double value(const Change &c) const;
+};
+
+
+struct Board : State
+{
+	vector<Point> bestPoint;
 	double Defv[N][N], Attv[N][N];
 	double Dweight, Aweight;
 	int mxDRank, mxARank;
 	
-	int *operator [](int x)
-	{
-		return map[x];
-	}
+	double getval(int x, int y) const;
 	
-	int getmap(int x, int y) const
-	{
-		if(!in(x, y))
-			return -1;
-		return map[x][y];
-	}
+	void clear();
 	
-	double getval(int x, int y) const
-	{
-		return Dweight * Defv[x][y] + Aweight * Attv[x][y];
-	}
+	void getAdj(double val[][N], int &mx, int type);
 	
-	void clear()
-	{
-		forceDef.clear(), forceAtt.clear();
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				Defv[i][j] = Attv[i][j] = 0;
-		Dweight = Aweight = 0;
-		mxDRank = mxARank = 0;
-	}
+	void getBest();
 	
-	void getAdj(vector<Point> &p, double val[][N], int &mx, int type)
+	void calcValues();
+	
+	Point makeDecision();
+	
+};
+
+Board arena;
+
+namespace DecisionTree
+{
+	Point makeDecision(const Board &b);
+	
+	double Minvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h);
+	
+	double Maxvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h);
+};
+
+Change::Change()
+{
+	v.clear();
+}
+
+Change::Change(const Change &c)
+{
+	v = c.v;
+}
+
+void Change::add(const Point &p)
+{
+	v.push_back(p);
+}
+
+void Change::add(int x, int y)
+{
+	Change::add(Point(x, y));
+}
+
+void Change::pop()
+{
+	v.resize(v.size() - 1);
+}
+
+State::State()
+{
+	memset(map, 0, sizeof(map));
+}
+
+State::State(const State &s)
+{
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			map[i][j] = s.map[i][j];
+}
+
+
+int *State::operator [](int x)
+{
+	return map[x];
+}
+
+int State::getmap(int x, int y) const
+{
+	if(!in(x, y))
+		return -1;
+	return map[x][y];
+}
+
+
+double State::value() const
+{
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(getmap(i, j) != 0)
+				for(int k = 0; k < 4; k++)
+					if(getmap(i, j) != getmap(i - dx[k], j - dy[k]))
+					{
+						int x = i, y = j, t = getmap(i, j), cnt = 0;
+						while(getmap(x, y) == t)
+							cnt++, x += dx[k], y += dy[k];
+						if(cnt >= 5)
+							return t == 1 ? 1 : -1;
+					}
+	return 0;
+}
+
+double State::value(const Change &c) const
+{
+	
+	for(int i = 0; i < c.v.size(); i++)
 	{
-		
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				if(map[i][j] == 0)
-					for(int k = 0; k < 4; k++)
+		int x = c.v[i].x, y = c.v[i].y;
+		for(int j = 0; j < 4; j++)
+		{
+			int x1 = x, y1 = y, x2 = x, y2 = y, cnt = 1, type = getmap(x, y);
+			while(getmap(x1 - dx[j], y1 - dy[j]) == type)
+				x1 -= dx[j], y1 -= dy[j], cnt++;
+			while(getmap(x2 + dx[j], y2 + dy[j]) == type)
+				x2 += dx[j], y2 += dy[j], cnt++;
+			if(cnt >= 5)
+				return type == 1 ? 1 : -1;
+		}
+	}
+	return 0;
+}
+
+
+double Board::getval(int x, int y) const
+{
+	return Dweight * Defv[x][y] + Aweight * Attv[x][y];
+}
+
+void Board::clear()
+{
+	bestPoint.clear();
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			Defv[i][j] = Attv[i][j] = 0;
+	Dweight = Aweight = 0;
+	mxDRank = mxARank = 0;
+}
+
+void Board::getAdj(double val[][N], int &mx, int type)
+{
+	
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(map[i][j] == 0)
+				for(int k = 0; k < 4; k++)
+				{
+					int cnt = 1, side = 0, rank = 0;
+					int x1 = i, y1 = j;
+					while(getmap(x1 - dx[k], y1 - dy[k]) == type)
+						x1 -= dx[k], y1 -= dy[k], cnt++;
+					int x2 = i, y2 = j;
+					while(getmap(x2 + dx[k], y2 + dy[k]) == type)
+						x2 += dx[k], y2 += dy[k], cnt++;
+					if(cnt <= 1)
+						continue;
+					
+					int xx, yy;
+					xx = x1, yy = y1;
+					while(getmap(xx - dx[k], yy - dy[k]) == type || getmap(xx - dx[k], yy - dy[k]) == 0)
+						xx -= dx[k], yy -= dy[k], side++;
+					xx = x2, yy = y2;
+					while(getmap(xx + dx[k], yy + dy[k]) == type || getmap(xx + dx[k], yy + dy[k]) == 0)
+						xx += dx[k], yy += dy[k], side++;
+					
+					if(side + cnt < 5)
+						continue;
+					
+					rank += 2 * cnt;
+					if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
+						rank += 1;
+					if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
+						rank += 1;
+					if(rank >= 10)
+						rank += 10;
+					
+					mx = max(mx, rank);
+					
+					val[i][j] += 1.0 * sqr(rank / 3.0);
+				}
+	
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(map[i][j] == 0)
+				for(int k = 0; k < 8; k++)
+					if(getmap(i + dx[k], j + dy[k]) == 0)
 					{
 						int cnt = 1, side = 0, rank = 0;
 						int x1 = i, y1 = j;
-						while(getmap(x1 - dx[k], y1 - dy[k]) == type)
-							x1 -= dx[k], y1 -= dy[k], cnt++;
-						int x2 = i, y2 = j;
+						int x2 = i + dx[k], y2 = j + dy[k];
 						while(getmap(x2 + dx[k], y2 + dy[k]) == type)
 							x2 += dx[k], y2 += dy[k], cnt++;
 						if(cnt <= 1)
@@ -113,7 +288,7 @@ struct Board
 						while(getmap(xx + dx[k], yy + dy[k]) == type || getmap(xx + dx[k], yy + dy[k]) == 0)
 							xx += dx[k], yy += dy[k], side++;
 						
-						if(side + cnt < 5)
+						if(side + cnt + 1 < 5)
 							continue;
 						
 						rank += 2 * cnt;
@@ -121,140 +296,165 @@ struct Board
 							rank += 1;
 						if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
 							rank += 1;
-						if(cnt >= 5)
-							rank += 2;
 						
-						if(mx < rank)
-							p.clear(), mx = rank;
-						if(mx == rank && rank >= 10)
-							p.push_back(Point(i, j));
-						
-						val[i][j] += 1.0 * sqr(rank / 3.0);
+						val[i][j] += 0.8 * sqr(rank / 3.0);
 					}
-		
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				if(map[i][j] == 0)
-					for(int k = 0; k < 8; k++)
-						if(getmap(i + dx[k], j + dy[k]) == 0)
-						{
-							int cnt = 1, side = 0, rank = 0;
-							int x1 = i, y1 = j;
-							int x2 = i + dx[k], y2 = j + dy[k];
-							while(getmap(x2 + dx[k], y2 + dy[k]) == type)
-								x2 += dx[k], y2 += dy[k], cnt++;
-							if(cnt <= 1)
-								continue;
-							
-							int xx, yy;
-							xx = x1, yy = y1;
-							while(getmap(xx - dx[k], yy - dy[k]) == type || getmap(xx - dx[k], yy - dy[k]) == 0)
-								xx -= dx[k], yy -= dy[k], side++;
-							xx = x2, yy = y2;
-							while(getmap(xx + dx[k], yy + dy[k]) == type || getmap(xx + dx[k], yy + dy[k]) == 0)
-								xx += dx[k], yy += dy[k], side++;
-							
-							if(side + cnt + 1 < 5)
-								continue;
-							
-							rank += 2 * cnt;
-							if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
-								rank += 1;
-							if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
-								rank += 1;
-							
-							val[i][j] += 0.8 * sqr(rank / 3.0);
-						}
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				if(map[i][j] == 0)
-					for(int k = 0; k < 8; k++)
-						if(getmap(i + dx[k], j + dy[k]) == 0 && getmap(i + 2 * dx[k], j + 2 * dy[k]) == 0)
-						{
-							int cnt = 1, side = 0, rank = 0;
-							int x1 = i, y1 = j;
-							int x2 = i + 2 * dx[k], y2 = j + 2 * dy[k];
-							while(getmap(x2 + dx[k], y2 + dy[k]) == type)
-								x2 += dx[k], y2 += dy[k], cnt++;
-							if(cnt <= 1)
-								continue;
-							
-							int xx, yy;
-							xx = x1, yy = y1;
-							while(getmap(xx - dx[k], yy - dy[k]) == type || getmap(xx - dx[k], yy - dy[k]) == 0)
-								xx -= dx[k], yy -= dy[k], side++;
-							xx = x2, yy = y2;
-							while(getmap(xx + dx[k], yy + dy[k]) == type || getmap(xx + dx[k], yy + dy[k]) == 0)
-								xx += dx[k], yy += dy[k], side++;
-							
-							if(side + cnt + 2 < 5)
-								continue;
-							
-							rank += 2 * cnt;
-							if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
-								rank += 1;
-							if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
-								rank += 1;
-							
-							val[i][j] += 0.6 * sqr(rank / 3.0);
-						}
-	}
-	
-	void getForce(vector<Point> &p, int type)
-	{
-		vector<pair<double, Point> > tmp;
-		for(int i = 0; i < p.size(); i++)
-			tmp.push_back(make_pair(getval(p[i].x, p[i].y), p[i]));
-		sort(tmp.begin(), tmp.end(), greater<pair<double, Point> >());
-		p.clear();
-		for(int i = 0; i < tmp.size(); i++)
-			p.push_back(tmp[i].second);
-	}
-	
-	void calcValues()
-	{
-		clear();
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				if(getmap(i, j) == 0)
-					Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
-		
-		getAdj(forceDef, Defv, mxDRank, 2);
-		getAdj(forceAtt, Attv, mxARank, 1);
-		
-		Dweight = 0.5;
-		if(mxARank > mxDRank)
-			Dweight -= 0.2;
-		if(mxARank < mxDRank)
-			Dweight += 0.2;
-		Aweight = 1.0 - Dweight;
-		
-		getForce(forceDef, 2);
-		getForce(forceAtt, 1);
-	}
-	
-	Point makeDecision()
-	{
-		calcValues();
-		
-		if(mxARank >= 10 && mxDRank <= mxARank && forceAtt.size())
-			return forceAtt[0];
-		if(mxDRank >= 10 && forceDef.size())
-			return forceDef[0];
-		
-		
-		double best = -1;
-		Point p;
-		for(int i = 0; i < N; i++)
-			for(int j = 0; j < N; j++)
-				if(getmap(i, j) == 0 && getval(i, j) > best)
-					best = getval(i, j), p = Point(i, j);
-		return p;
-	}
-	
-};
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(map[i][j] == 0)
+				for(int k = 0; k < 8; k++)
+					if(getmap(i + dx[k], j + dy[k]) == 0 && getmap(i + 2 * dx[k], j + 2 * dy[k]) == 0)
+					{
+						int cnt = 1, side = 0, rank = 0;
+						int x1 = i, y1 = j;
+						int x2 = i + 2 * dx[k], y2 = j + 2 * dy[k];
+						while(getmap(x2 + dx[k], y2 + dy[k]) == type)
+							x2 += dx[k], y2 += dy[k], cnt++;
+						if(cnt <= 1)
+							continue;
+						
+						int xx, yy;
+						xx = x1, yy = y1;
+						while(getmap(xx - dx[k], yy - dy[k]) == type || getmap(xx - dx[k], yy - dy[k]) == 0)
+							xx -= dx[k], yy -= dy[k], side++;
+						xx = x2, yy = y2;
+						while(getmap(xx + dx[k], yy + dy[k]) == type || getmap(xx + dx[k], yy + dy[k]) == 0)
+							xx += dx[k], yy += dy[k], side++;
+						
+						if(side + cnt + 2 < 5)
+							continue;
+						
+						rank += 2 * cnt;
+						if(getmap(x1 - dx[k], y1 - dy[k]) == 0)
+							rank += 1;
+						if(getmap(x2 + dx[k], y2 + dy[k]) == 0)
+							rank += 1;
+						
+						val[i][j] += 0.6 * sqr(rank / 3.0);
+					}
+}
 
-Board arena;
+void Board::getBest()
+{
+	vector<pair<double, Point> > tmp;
+	for(int i = 1; i < N; i++)
+		for(int j = 1; j < N; j++)
+			if(getmap(i, j) == 0)
+				tmp.push_back(make_pair(getval(i, j), Point(i, j)));
+	sort(tmp.begin(), tmp.end(), greater<pair<double, Point> >());
+	for(int i = 0; i < min(12, (int) tmp.size()); i++)
+		bestPoint.push_back(tmp[i].second);
+}
+
+void Board::calcValues()
+{
+	clear();
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(getmap(i, j) == 0)
+				Defv[i][j] = Attv[i][j] = 0.5 - 0.1 * rand() / RAND_MAX - 0.05 * max(abs(7 - i), abs(7 - j));
+	
+	getAdj(Defv, mxDRank, 2);
+	getAdj(Attv, mxARank, 1);
+	
+	Dweight = 0.5;
+	if(mxARank > mxDRank)
+		Dweight -= 0.2;
+	if(mxARank < mxDRank)
+		Dweight += 0.2;
+	Aweight = 1.0 - Dweight;
+	
+	getBest();
+}
+
+Point Board::makeDecision()
+{
+	calcValues();
+	
+	return DecisionTree::makeDecision(*this);
+}
+
+Point DecisionTree::makeDecision(const Board &b)
+{
+	double best = -1e100;
+	Point ret;
+	
+	Change c;
+	State s(b);
+	for(int i = 0; i < b.bestPoint.size(); i++)
+	{
+		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
+		s.map[x][y] = 1;
+		c.add(x, y);
+		double tmp = DecisionTree::Minvalue(b, s, c, best, 1e100, 4);
+		s.map[x][y] = 0;
+		c.pop();
+		
+		if(tmp > best)
+			best = tmp, ret = Point(x, y);
+		if(best > 0)
+			return ret;
+	}
+	
+	
+	best = -1;
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
+			if(b.getmap(i, j) == 0 && b.getval(i, j) > best)
+				best = b.getval(i, j), ret = Point(i, j);
+	return ret;
+}
+
+double DecisionTree::Minvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h)
+{
+	double cur = s.value(c);
+	if(cur != 0) return cur;
+	if(h <= 0) return cur;
+	
+	double v = 1e100;
+	
+	for(int i = 0; i < b.bestPoint.size(); i++)
+	{
+		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
+		if(s.getmap(x, y) != 0) continue;
+		s.map[x][y] = 2;
+		c.add(x, y);
+		v = min(v, DecisionTree::Maxvalue(b, s, c, alpha, beta, h - 1));
+		s.map[x][y] = 0;
+		c.pop();
+		
+		if(v <= alpha)
+			return v;
+		beta = min(beta, v);
+	}
+	return v;
+}
+
+double DecisionTree::Maxvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h)
+{
+	double cur = s.value(c);
+	if(cur != 0) return cur;
+	if(h <= 0) return cur;
+	
+	double v = -1e100;
+	State to(s);
+	
+	for(int i = 0; i < b.bestPoint.size(); i++)
+	{
+		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
+		if(s.getmap(x, y) != 0) continue;
+		s.map[x][y] = 1;
+		c.add(x, y);
+		v = max(v, DecisionTree::Minvalue(b, s, c, alpha, beta, h - 1));
+		s.map[x][y] = 0;
+		c.pop();
+		
+		if(v >= beta)
+			return v;
+		alpha = max(alpha, v);
+	}
+	return v;
+}
 
 namespace Yours
 {
@@ -290,13 +490,21 @@ namespace Mine
 	void Go()
 	{
 		Round++;
+
+#ifdef Debug
+		Log = fopen("log.txt", "a+");
+		fprintf(Log, "Round %d\n", Round);
+		fclose(Log);
+#endif
+		
 		Point put = arena.makeDecision();
 
 #ifdef Debug
 		Log = fopen("log.txt", "a+");
-		
-		
-		fprintf(Log, "Round %d\n", Round);
+		fprintf(Log, "(%d, %d)\n", put.x, put.y);
+		fprintf(Log, "Best\n");
+		for(int i = 0; i < arena.bestPoint.size(); i++)
+			fprintf(Log, "%d %d\n", arena.bestPoint[i].x, arena.bestPoint[i].y);
 		
 		fprintf(Log, "Defv\n");
 		fprintf(Log, "   ");
@@ -335,7 +543,7 @@ namespace Mine
 		for(int i = 0; i < arena.Att.size(); i++)
 			fprintf(Log, "%d %d to %d %d : cnt = %d rank = %d\n", arena.Att[i].fr.x, arena.Att[i].fr.y, arena.Att[i].to.x, arena.Att[i].to.y, arena.Att[i].c, arena.Att[i].r);
 		fprintf(Log, "\n");
-*/
+
 		
 		fprintf(Log, "ForceDef\n");
 		for(int i = 0; i < arena.forceDef.size(); i++)
@@ -343,7 +551,7 @@ namespace Mine
 		fprintf(Log, "ForceAtt\n");
 		for(int i = 0; i < arena.forceAtt.size(); i++)
 			fprintf(Log, "%d %d\n", arena.forceAtt[i].x, arena.forceAtt[i].y);
-		
+*/
 		
 		fprintf(Log, "mxDRank = %d\n", arena.mxDRank);
 		fprintf(Log, "mxARank = %d\n", arena.mxARank);
