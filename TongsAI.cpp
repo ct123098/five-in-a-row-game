@@ -1,6 +1,6 @@
 //#define Debug
 
-//version = 0.2.1
+//version = 0.2.2
 //author = ChenTong
 
 #include <iostream>
@@ -8,8 +8,11 @@
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
+
 #include <vector>
 #include <set>
+#include <map>
+
 #include <ctime>
 #include <windows.h>
 
@@ -19,11 +22,19 @@ using namespace std;
 const int N = 15;
 const int dx[] = {1, 1, 1, 0, 0, -1, -1, -1};
 const int dy[] = {1, 0, -1, 1, -1, 1, 0, -1};
+const double eps = 1e-8;
 int Round = 0;
 
 #ifdef Debug
 FILE *Log;
 #endif
+
+int dcmp(double x)
+{
+	if(-eps < x && x < eps)
+		return 0;
+	return x > 0 ? 1 : -1;
+}
 
 double sqr(double x)
 { return x * x; }
@@ -63,6 +74,8 @@ struct Change
 	
 	Change(const Change &c);
 	
+	Point &operator [](int x);
+	
 	void add(const Point &p);
 	
 	void add(int x, int y);
@@ -72,7 +85,7 @@ struct Change
 
 struct State
 {
-	int map[N][N];
+	int Map[N][N];
 	
 	State();
 	
@@ -130,6 +143,10 @@ Change::Change(const Change &c)
 	v = c.v;
 }
 
+Point &Change::operator [](int x)
+{
+	return v[x];
+}
 void Change::add(const Point &p)
 {
 	v.push_back(p);
@@ -147,27 +164,27 @@ void Change::pop()
 
 State::State()
 {
-	memset(map, 0, sizeof(map));
+	memset(Map, 0, sizeof(Map));
 }
 
 State::State(const State &s)
 {
 	for(int i = 0; i < N; i++)
 		for(int j = 0; j < N; j++)
-			map[i][j] = s.map[i][j];
+			Map[i][j] = s.Map[i][j];
 }
 
 
 int *State::operator [](int x)
 {
-	return map[x];
+	return Map[x];
 }
 
 int State::getmap(int x, int y) const
 {
 	if(!in(x, y))
 		return -1;
-	return map[x][y];
+	return Map[x][y];
 }
 
 
@@ -190,7 +207,8 @@ double State::value() const
 
 double State::value(const Change &c) const
 {
-	
+	double ret = 0;
+	map<pair<Point, Point>, bool> hash;
 	for(int i = 0; i < c.v.size(); i++)
 	{
 		int x = c.v[i].x, y = c.v[i].y;
@@ -202,12 +220,18 @@ double State::value(const Change &c) const
 			while(getmap(x2 + dx[j], y2 + dy[j]) == type)
 				x2 += dx[j], y2 += dy[j], cnt++;
 			if(cnt >= 5)
-				return type == 1 ? 1 : -1;
+				return (type == 1 ? 1.0 : -1.0) * 1e12;
+			if(hash[make_pair(Point(x1, y1), Point(x2, y2))]) continue;
+			double rank = 0;
+			rank += (getmap(x1 - dx[j], y1 - dy[j]) == 0);
+			rank += (getmap(x2 + dx[j], y2 + dy[j]) == 0);
+			rank += cnt;
+			ret += (type == 1 ? 1.0 : -1.0) * 1.0 * sqr(rank / 2.0);
+			hash[make_pair(Point(x1, y1), Point(x2, y2))] = true;
 		}
 	}
-	return 0;
+	return ret;
 }
-
 
 double Board::getval(int x, int y) const
 {
@@ -229,7 +253,7 @@ void Board::getAdj(double val[][N], int &mx, int type)
 	
 	for(int i = 0; i < N; i++)
 		for(int j = 0; j < N; j++)
-			if(map[i][j] == 0)
+			if(Map[i][j] == 0)
 				for(int k = 0; k < 4; k++)
 				{
 					int cnt = 1, side = 0, rank = 0;
@@ -268,7 +292,7 @@ void Board::getAdj(double val[][N], int &mx, int type)
 	
 	for(int i = 0; i < N; i++)
 		for(int j = 0; j < N; j++)
-			if(map[i][j] == 0)
+			if(Map[i][j] == 0)
 				for(int k = 0; k < 8; k++)
 					if(getmap(i + dx[k], j + dy[k]) == 0)
 					{
@@ -301,7 +325,7 @@ void Board::getAdj(double val[][N], int &mx, int type)
 					}
 	for(int i = 0; i < N; i++)
 		for(int j = 0; j < N; j++)
-			if(map[i][j] == 0)
+			if(Map[i][j] == 0)
 				for(int k = 0; k < 8; k++)
 					if(getmap(i + dx[k], j + dy[k]) == 0 && getmap(i + 2 * dx[k], j + 2 * dy[k]) == 0)
 					{
@@ -337,13 +361,16 @@ void Board::getAdj(double val[][N], int &mx, int type)
 void Board::getBest()
 {
 	vector<pair<double, Point> > tmp;
-	for(int i = 1; i < N; i++)
-		for(int j = 1; j < N; j++)
+	for(int i = 0; i < N; i++)
+		for(int j = 0; j < N; j++)
 			if(getmap(i, j) == 0)
 				tmp.push_back(make_pair(getval(i, j), Point(i, j)));
 	sort(tmp.begin(), tmp.end(), greater<pair<double, Point> >());
-	for(int i = 0; i < min(12, (int) tmp.size()); i++)
+	for(int i = 0; i < min(50, (int) tmp.size()); i++)
+	{
 		bestPoint.push_back(tmp[i].second);
+		if(tmp[i].first < 1) break;
+	}
 }
 
 void Board::calcValues()
@@ -362,6 +389,7 @@ void Board::calcValues()
 		Dweight -= 0.2;
 	if(mxARank < mxDRank)
 		Dweight += 0.2;
+	if(Round <= 10) Dweight = max(0.6, Dweight);
 	Aweight = 1.0 - Dweight;
 	
 	getBest();
@@ -384,31 +412,39 @@ Point DecisionTree::makeDecision(const Board &b)
 	for(int i = 0; i < b.bestPoint.size(); i++)
 	{
 		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
-		s.map[x][y] = 1;
+		
+		s[x][y] = 1;
 		c.add(x, y);
-		double tmp = DecisionTree::Minvalue(b, s, c, best, 1e100, 4);
-		s.map[x][y] = 0;
+		
+		double tmp = DecisionTree::Minvalue(b, s, c, best, 1e100, 3);
+		
+		s[x][y] = 0;
 		c.pop();
+
+#ifdef Debug
+		Log = fopen("log.txt", "a+");
+		fprintf(Log, "%d %d : %.2lf\n", x, y, tmp);
+		fclose(Log);
+#endif
 		
 		if(tmp > best)
 			best = tmp, ret = Point(x, y);
-		if(best > 0)
-			return ret;
 	}
-	
-	
-	best = -1;
-	for(int i = 0; i < N; i++)
-		for(int j = 0; j < N; j++)
-			if(b.getmap(i, j) == 0 && b.getval(i, j) > best)
-				best = b.getval(i, j), ret = Point(i, j);
 	return ret;
+
+//
+//	best = -1;
+//	for(int i = 0; i < N; i++)
+//		for(int j = 0; j < N; j++)
+//			if(b.getmap(i, j) == 0 && b.getval(i, j) > best)
+//				best = b.getval(i, j), ret = Point(i, j);
+//	return ret;
 }
 
 double DecisionTree::Minvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h)
 {
 	double cur = s.value(c);
-	if(cur != 0) return cur;
+	if(cur < -1e10 || 1e10 < cur) return cur;
 	if(h <= 0) return cur;
 	
 	double v = 1e100;
@@ -417,10 +453,13 @@ double DecisionTree::Minvalue(const Board &b, State &s, Change &c, double alpha,
 	{
 		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
 		if(s.getmap(x, y) != 0) continue;
-		s.map[x][y] = 2;
+		
+		s[x][y] = 2;
 		c.add(x, y);
+		
 		v = min(v, DecisionTree::Maxvalue(b, s, c, alpha, beta, h - 1));
-		s.map[x][y] = 0;
+		
+		s[x][y] = 0;
 		c.pop();
 		
 		if(v <= alpha)
@@ -433,7 +472,7 @@ double DecisionTree::Minvalue(const Board &b, State &s, Change &c, double alpha,
 double DecisionTree::Maxvalue(const Board &b, State &s, Change &c, double alpha, double beta, int h)
 {
 	double cur = s.value(c);
-	if(cur != 0) return cur;
+	if(cur < -1e10 || 1e10 < cur) return cur;
 	if(h <= 0) return cur;
 	
 	double v = -1e100;
@@ -443,10 +482,13 @@ double DecisionTree::Maxvalue(const Board &b, State &s, Change &c, double alpha,
 	{
 		int x = b.bestPoint[i].x, y = b.bestPoint[i].y;
 		if(s.getmap(x, y) != 0) continue;
-		s.map[x][y] = 1;
+		
+		s[x][y] = 1;
 		c.add(x, y);
+		
 		v = max(v, DecisionTree::Minvalue(b, s, c, alpha, beta, h - 1));
-		s.map[x][y] = 0;
+		
+		s[x][y] = 0;
 		c.pop();
 		
 		if(v >= beta)
@@ -494,6 +536,8 @@ namespace Mine
 #ifdef Debug
 		Log = fopen("log.txt", "a+");
 		fprintf(Log, "Round %d\n", Round);
+		
+		fprintf(Log, "Best\n");
 		fclose(Log);
 #endif
 		
@@ -502,9 +546,6 @@ namespace Mine
 #ifdef Debug
 		Log = fopen("log.txt", "a+");
 		fprintf(Log, "(%d, %d)\n", put.x, put.y);
-		fprintf(Log, "Best\n");
-		for(int i = 0; i < arena.bestPoint.size(); i++)
-			fprintf(Log, "%d %d\n", arena.bestPoint[i].x, arena.bestPoint[i].y);
 		
 		fprintf(Log, "Defv\n");
 		fprintf(Log, "   ");
@@ -576,7 +617,7 @@ int main()
 #endif
 	
 	srand(time(0));
-	memset(arena.map, 0, sizeof(arena.map));
+	memset(arena.Map, 0, sizeof(arena.Map));
 	int first;
 	cin >> first;
 	if(first)
