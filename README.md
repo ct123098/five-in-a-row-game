@@ -33,3 +33,7 @@ lalala
 ---
 asdf
 
+$$
+F = ma
+x = sin a
+$$
