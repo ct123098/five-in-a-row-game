@@ -36,5 +36,5 @@ asdf
 $$
 F = ma \\
 x = \sin a \\
-sigma = \sum_{i = 0}^{n} C_n^i
+sigma = \sum_{i = 0}^{n} C_n^i \\
 $$
