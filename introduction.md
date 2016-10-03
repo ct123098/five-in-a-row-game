@@ -1,11 +1,11 @@
 # Introduction
 
-
 ## Input
 
 
 ## Output
 
+---
 # Practice
 ## h2
 ### h3
