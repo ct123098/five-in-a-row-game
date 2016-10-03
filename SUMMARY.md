@@ -1,5 +1,5 @@
 # Summary
 
-* [Introduction](README.md)
+* [five-in-a-row-game](README.md)
 * [Introduction](introduction.md)
 
